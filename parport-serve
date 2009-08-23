@@ -21,6 +21,7 @@ you could do 'make install' to install the python module, but it
 doesn't work right. see code below for a direct ioctl->driver version
 
 put 'blacklist lp' in /etc/modprobe.d/blacklist
+load 'parport_pc' module if needed.
 
 """
 from parports import LinuxParallel, NullPort

@@ -78,10 +78,10 @@ class LinuxParallel(object):
     def write_data(self, value):
         self.port.setData(value)
 
-    def getInBusy(self):
-        """matching the ieee1284.Port api would be awkward here, so
-        i'll just use a bit of the parallel.Parallel one too"""
-        return self.port.getInBusy()
+    def __getattr__(self, attr):
+        if attr.startswith('get'):
+            return getattr(self.port, attr)
+        raise NotImplementedError(attr)
         
 
 class NullPort(object):
