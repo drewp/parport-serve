@@ -1,0 +1,116 @@
+#!/usr/bin/python
+
+"""
+output on a parallel port under solaris
+
+GET /pin/12 -> 'false'
+POST /pin/4 'value=true'
+
+if a watched pin changes, we post to the hub like this:
+  topic=slash/pin/12&value=true
+
+--------
+
+uses pypi: Louie, BitVector, rdflib
+ubuntu package: python-parallel
+
+follow http://www.captain.at/programming/solaris/ to install
+http://sourceforge.net/projects/libieee1284
+
+you could do 'make install' to install the python module, but it
+doesn't work right. see code below for a direct ioctl->driver version
+
+put 'blacklist lp' in /etc/modprobe.d/blacklist
+
+"""
+from parports import LinuxParallel, NullPort
+from twisted.internet import reactor
+from twisted.internet import task
+import socket, logging, os, simplejson
+from BitVector import BitVector
+import twisted.web.resource
+import twisted.web.server
+
+class ParportBits(object):
+    """allow the bits on the parallel port to be set individually"""
+    def __init__(self, port):
+        self.port = port
+        self.data = BitVector(size=8)
+        self.write()
+
+    def write(self):
+        self.port.write_data(int(self.data))
+
+    def set(self, bit, value):
+        """bit is measured from the LSB"""
+        log.info("bit %s to %s" % (bit, value))
+        self.data[7-bit] = int(value)
+        self.write()
+
+class Root(twisted.web.resource.Resource):
+    isLeaf = True
+    def __init__(self, bits):
+        self.bits = bits
+        
+    def render_GET(self, request):
+        getMethod = {
+         'acknowledge' : 'getInAcknowledge',
+         '10'          : 'getInAcknowledge',
+         'busy'        : 'getInBusy',
+         '11'          : 'getInBusy',       
+         'paperOut'    : 'getInPaperOut',
+         '12'          : 'getInPaperOut',
+         'select'      : 'getInSelected',
+         '13'          : 'getInSelected',
+         'error'       : 'getInError',
+         '15'          : 'getInError',
+            }
+        if len(request.postpath) == 2 and request.postpath[0] == 'pin':
+            methodName = getMethod[request.postpath[1]]
+            request.setHeader('content-type', 'text/json')
+            return simplejson.dumps(bool(getattr(self.bits.port, methodName)()))
+
+        name = "%s on %s" % (bits.port.device, socket.getfqdn())
+        return open("parport.html").read().replace('PORT', name)
+
+    def render_POST(self, request):
+        if len(request.postpath) == 2 and request.postpath[0] == 'pin':
+            pinNumber = int(request.postpath[1])
+            self.bits.set(pinNumber - 2,
+                          value=simplejson.loads(request.args['value'][0]))
+            return 'ok'
+        raise ValueError("unknown")
+
+def watchInputs(port):
+    prevBusy = [None]
+    def inputs():
+        b = p.getInBusy()
+        if b != prevBusy[0]:
+            prevBusy[0] = b
+            # post to hub
+            log.info("heater on %s" % (not b))
+        #bits.set(0, value=b)
+    task.LoopingCall(inputs).start(1)
+
+
+#port = 0x3bc # only supporting one port per process for now
+try:
+    p = LinuxParallel()
+    p.open()
+except OSError:
+    p = NullPort()
+    
+bits = ParportBits(p)
+try:
+    os.seteuid(501) # back to drewp for logging
+except OSError:
+    pass
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger()
+log.setLevel(logging.INFO)
+
+reactor.listenTCP(9999, twisted.web.server.Site(Root(bits)))
+
+reactor.run()
+

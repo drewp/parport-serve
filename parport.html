@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>parport</title>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
+    <script type="text/javascript" src="http://plus:9998/jquery-1.3.1.min.js"></script>
+    <script type="text/javascript">
+      // <![CDATA[
+$(document).ready(function() { 
+$(".outputs button").click(function() {
+    var pin = $(this).closest("tr").attr('pin');
+    console.log("clicked ",this, pin);
+    $.post('/pin/' + pin, {value: $(this).text()});
+});
+
+    function refreshInputs() {
+
+	if (!$("#autoRefresh").attr('checked')) {
+	    return;
+	}
+
+	$.each(["10", "11", "12", "13", "15"], function (i, pin) { 
+            var report = $('tr[pin="'+pin+'"] span');
+	    $.getJSON('/pin/'+pin, function(data) {
+		report.text(data);
+	    });
+	});
+	setTimeout(refreshInputs, 1000);
+    }
+    $("#autoRefresh").change(refreshInputs);
+    refreshInputs();
+});
+      // ]]>
+    </script>
+  </head>
+  <body>
+
+    <h1>Parallel port PORT</h1>
+
+    Outputs
+    <table class="outputs">
+      <tr pin="2"><td>pin 2 Data 0 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="3"><td>pin 3 Data 1 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="4"><td>pin 4 Data 2 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="5"><td>pin 5 Data 3 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="6"><td>pin 6 Data 4 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="7"><td>pin 7 Data 5 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="8"><td>pin 8 Data 6 </td><td><button>true</button> <button>false</button></td></tr>
+      <tr pin="9"><td>pin 9 Data 7 </td><td><button>true</button> <button>false</button></td></tr>
+    </table>
+
+    Inputs
+    <table>
+      <tr pin="10"><td>pin 10 </td><td>ack      </td><td><span>...</span></td></tr>
+      <tr pin="11"><td>pin 11 </td><td>busy     </td><td><span>...</span></td></tr>
+      <tr pin="12"><td>pin 12 </td><td>paperout </td><td><span>...</span></td></tr>
+      <tr pin="13"><td>pin 13 </td><td>select   </td><td><span>...</span></td></tr>
+      <tr pin="15"><td>pin 15 </td><td>error    </td><td><span>...</span></td></tr>
+    </table>
+    <div><input id="autoRefresh" type="checkbox"/> <label for="autoRefresh">auto refresh</label></div>
+
+  </body>
+</html>
