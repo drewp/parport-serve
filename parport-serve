@@ -24,13 +24,17 @@ put 'blacklist lp' in /etc/modprobe.d/blacklist
 load 'parport_pc' module if needed.
 
 """
-from parports import LinuxParallel, NullPort
+import socket, logging, os, simplejson, sys
+from optparse import OptionParser
+from twisted.python.util import sibpath
 from twisted.internet import reactor
 from twisted.internet import task
-import socket, logging, os, simplejson
-from BitVector import BitVector
 import twisted.web.resource
 import twisted.web.server
+import twisted.python.log
+from BitVector import BitVector
+import parport_serve
+from parport_serve.parports import LinuxParallel, NullPort
 
 class ParportBits(object):
     """allow the bits on the parallel port to be set individually"""
@@ -72,7 +76,7 @@ class Root(twisted.web.resource.Resource):
             return simplejson.dumps(bool(getattr(self.bits.port, methodName)()))
 
         name = "%s on %s" % (bits.port.device, socket.getfqdn())
-        return open("parport.html").read().replace('PORT', name)
+        return open(sibpath(parport_serve.__file__, "parport.html")).read().replace('PORT', name)
 
     def render_POST(self, request):
         if len(request.postpath) == 2 and request.postpath[0] == 'pin':
@@ -88,30 +92,38 @@ def watchInputs(port):
         b = p.getInBusy()
         if b != prevBusy[0]:
             prevBusy[0] = b
+
             # post to hub
+            
             log.info("heater on %s" % (not b))
         #bits.set(0, value=b)
     task.LoopingCall(inputs).start(1)
 
 
 #port = 0x3bc # only supporting one port per process for now
-try:
-    p = LinuxParallel()
-    p.open()
-except OSError:
-    p = NullPort()
+p = LinuxParallel()
+p.open()
     
 bits = ParportBits(p)
-try:
-    os.seteuid(501) # back to drewp for logging
-except OSError:
-    pass
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger()
-log.setLevel(logging.INFO)
 
-reactor.listenTCP(9999, twisted.web.server.Site(Root(bits)))
+parser = OptionParser()
+parser.add_option('--port', type="int", help='serve http on this port')
+parser.add_option('--verbose', action='store_true', help='log pin changes')
+#parser.add_option('--hub', help="pubsubhubbub hub that we subscribe and send changes to")
+#parser.add_option('--dummy', action='store_true', help="don't open the real port")
+#parser.add_option('--device', help="defaults to /dev/parport0")
+opts, args = parser.parse_args()
+
+if opts.verbose:
+    log.setLevel(logging.INFO)
+    twisted.python.log.startLogging(sys.stdout)
+else:
+    log.setLevel(logging.WARN)
+
+reactor.listenTCP(opts.port, twisted.web.server.Site(Root(bits)))
 
 reactor.run()
 
